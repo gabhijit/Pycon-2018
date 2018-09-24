@@ -1,0 +1,393 @@
+Abhout Me
+---------
+
+
+
+
+A Quick Survey
+--------------
+
+1. How many use virtual environment?
+2. How many of you know about semantic versioning?
+2. How many of you actively use requirements.txt or at-least have heard about it?
+3. Any linting code quality check tools you are using?
+
+
+Why should I care at all?
+-------------------------
+
+Isn't it simply - `python foo.py` and that's it?
+
+Well - yes that's an excellent way to quickly try out something, but not necessarily to deploy and keep deploying
+
+Helps to "Move faster - Break things' but often they remain broken.
+
+One thing I would like to mention here though - is I am going to present `A workflow` and this is not exactly what is ideal for every project, but as long as the problems described are addressed, one can use any number of tools out there.
+
+
+A Bit About Continuous Deployment
+---------------------------------
+
+From large - release cycles, to shortened release cycles -
+
+1. Faster Feature releases
+
+2. Quicker bug fixes
+
+But Why Faster Feature Releases? Because, everyone is doing it, you can't be 'left behind' :)
+
+3. Move from nightly builds to 'build on every commit', so if something's broken, it's understood much earlier. Early is better than Late.
+
+4. A step further - don't deploy every commit - but deploy 'fast enough'.
+
+
+Problems Peculiar to Python
+---------------------------
+
+1. Interpreted language - so Everything is 'run-time', there's no such thing as compile time.
+2. Every non-trivial project has dependencies (who in turn can have their own dependencies and so on.) Again 1. above makes it more challenging. Note: The same problems will be faced by any language, but in cases like Java/Golang, a compile time makes things lot more manageable, because broken things could be identified during compilation/linking.
+3. `sys.path` and what might get `imported` might be out of control - especially since lot of tools/utilities in many Linux distributions are written in Python and have their own dependencies and so on.
+
+Leads to - Not sure 'what indeed' is deployed.
+
+
+A few Years Back
+----------------
+
+1. Building AWS images - Start with a 'Golden Image' updated less frequently.
+2. Build CPython by hand -
+3. Do a wget/tar and install along with that
+4. Maintain developer/deployment VMs as RPMs (as RPMs have solved the problem of dependencies)
+
+It surely was messy (early days of pip/virtualenv, surely not matured enough) AMIs were more popular than docker images back then
+
+
+So what Problems we are trying to Solve
+---------------------------------------
+
+1. Better dependency management
+5. Keep environments separate (dev different from production) but reproducible
+2. Co-existence of multiple development environment on developer's laptop.
+3. Have a strong control over 'what gets deployed' and more importantly deploy what exactly has been tested.
+4. Containerization friendly
+6. Easy on-boarding of new developers. (If an 'entry' level developer is unproductive for a day, you could run an t2.large (2 Core/8GB) instance for 12 days in that cost.)
+
+
+Dependency Management
+---------------------
+
+1. All of us use version control, mostly 'git' - so we track our code in 'git' like version control system.
+2. So you track your code 'git' what about dependencies are they tracked?
+3. Choices - Create a self contained environment for your project - 'virtualenv'
+4. So the first couple of steps in starting a new project -
+
+```
+git init
+virtualenv venv
+```
+
+5. You should probably also 'track' your virtual environment in 'git' and then dependencies are taken care of - Often it is suboptimal
+   - You'll be tracking pretty large number of (released versions of) packages inside your repo, growing your repository size un-necessariy
+   - What if you instead 'track what dependencies are required by your project' and re-create virtual environment on
+     new developer's machine?
+   - Thankfully virtualenv along with Python interpreter also installs Python's defacto package manager in the virtual environment.
+   - and 'pip supports installation where requirements are specified in a file - a common convention is to call this
+     `requirements.txt`
+
+So next step in our project is add our requirements in a file called `requirements.txt` and then use the pip facility to `install` using that
+`pip install -r requirements.txt` and simply track 'requirements.txt' file, lightweight and can 'almost guarantee' identical virtual environments created.
+
+
+6. Semantic Versioning
+-----------------------
+
+Lot of packages are under continuous development and consequently newer version and we don't always want - Latest and Greatest versions
+  - So it'd be better if we can track versions of dependent packages that we want to use.
+  - requirements.txt supports this where you can specify which versions to be used, so let's just not track dependencies,
+    let's track the versions as well in requirements.txt, which `pip` will honour if specified.
+
+7. So we've got it covered
+---------------------------
+Well almost - except for one part - What about `dependencies of dependencies`?
+- You cannot simply assume another project that is your dependency will follow the same workflow as yours.
+- It would be nice that we set it up once and then re-create it every time
+- So once you've decided what your dependencies are
+   1. Install them
+   2. use something called `pip freeze` to 'freeze' the dependencies
+
+To recap -
+
+# 1. Initialize repo
+git init .
+
+# 2. Create a virtual-env
+virtualenv venv
+# or
+virtualenv --python=/usr/bin/python3 venv3
+
+## Important - We are going to use the `pip` inside above virtual environment - so you either `activate` or use explicit path
+# Personal preference is explicit path (sometimes I have been surprised by `activate` but haven't looked closely why because I
+simply then use the absolute path)
+
+venv/bin/pip --help
+
+# Later description assumes we use Python or Pip inside this.
+
+# 3. Create a temp requirements file (say `requests` is our requirements)
+cat > requirements.txt
+requests
+
+# 4. Use pip to install `requests` and it's dependencies
+pip install -r requirements.txt
+
+# 5. Freeze those dependencies
+pip freeze > requirements.txt
+
+# 6. Track the file to repository
+git add requirements.txt
+
+# 7. and don't track virtual environment in repository
+cat > .gitinore
+venv*
+
+This would pretty much solve the problem of reproducible builds. Let's push this a little more -
+
+8. Any non-trivial code will have some unit tests etc. and Python provides excellent facilities for that - we will not look at those in any more details
+   - tox
+   - unittest
+   - mock
+   - nose
+
+9. Also, you might also - want to use some code linting tools like `pylint` or `pep8`, we'd be looking at pylint in little more details
+   - pylint
+   - pyflake
+   - pep8
+
+So these are 'useful' for your project but not exactly dependencies of your project, ideally it'd be better to track them as well,
+
+# sure we can install them using `pip` and do a `pip freeze`, that should be good, well almost -
+1. While we certainly want them on dev machines and sometimes on build machines but they are not required in production machines,
+so ideally if we could track that as `dev-requirements.txt` it would be nice. This is where `pip freeze` is not going to help -
+
+what pip freeze does is - goes through `site-packages` inside your virtual environment and collects everything that is there. So the `dev-requirements` (and their dependencies) would also 'spill over'.
+
+So it'll be nice if we could do something like that - Enter `pipenv`
+
+10. Pipenv combines `virtualenv` and `pip` and has a few more additional features.
+
+Basically pipenv, Works using two files Pipfile and Pipfile.lock - Pipfile is where you specify your dependencies and Pipfile.lock is where you 'fix' versions of software you want to install in your virtualenv. It can automatically do a lot of things for you like creating `virtualenv` and setting it up for you. We are mainly going to look at `pipenv` to separate - 'prod' requirements and 'dev' requirements.
+
+- First do a `pipenv install` - This will create empty Pipfile and Pipfile.lock
+- Add dependencies in the Pipfile -
+  - Note here, we do not specify the exact semantic version (that will be decided by Pipfile.lock later)
+
+```
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[dev-packages]
+
+[packages]
+requests = "*"
+
+[requires]
+python_version = "2.7"
+
+```
+- Add required dependencies
+
+
+- Do a `pipenv update` - This basically does two things `pipenv lock`, lock the versions and does a `pipenv sync`. Installs those versions in the virtualenv created.
+
+- Once we are satisfied - We'd not really use a pipenv generated virtual environment, instead we'd use Pipenv to create our requirements files as required.
+
+- pipenv lock -r
+
+and
+
+- pipenv lock -r --dev
+
+
+There are many other 'features' but we are really not going to use all of them, because our job of generating separate requirements files is done
+
+
+Thus so far - we have solved three of the problems that we described
+1. Dependency Management
+2. Deterministic Builds
+3. Separate Dev and Prod requirements files.
+
+
+Next we shall take a look at how to enforce certain coding standards -
+
+Why?
+----
+
+1. You may have certain coding guidelines as to variable/function naming styles, docstrings etc.
+2. You may want to follow pep8ish guidelines but not be overly religious about it
+
+Also,
+
+1. Most importantly you want to catch a few errors like attribute access invalid syntax at 'build time itself' in fact earlier.
+2. So any code that gets into your central repository at-least passes certain very basic qualifying criteria
+
+We'll look at how this can be achieved using `pylint` and how this can be integrated in your development workflow -
+
+Pylint - A Quick Overview
+--------------------------
+
+From Wikipedia - >> It's a Source Code, Bug and Code Quality Checker for Python Programming Language
+
+It performs static code analysis to identify -
+
+1. Code is adhering to your coding guidelines - (naming conventions, line lengths etc.)
+2. Provide indication of Errors (missing import, unknown attributes etc.)
+3. Refactoring help (identification of duplicate code, suggestions about # of branches, parameters etc.)
+4. Other types of Errors (unused imports, unreachable code etc.)
+
+
+PyLint - A Quick Workflow
+
+1. The simplest way to use `pylint` is to do a `pip install pylint`
+2. And then do a `pylint modulename.py`
+
+Which will give you a detailed analysis of your code, and some rating of your code and usually first invocation gives a very bad score, but don't get disheartened! :-)
+
+
+A motivation
+-------------
+
+I had a code that looked something like
+
+```
+somelist = map(lambda x:x, somelinst)
+```
+
+Now, in a compiled language, most of the modern self respecting compilers would simply ignore this and make it a no-op (unless you totally disable any optimization), but unfortunately that doesn't happe nin Python (may be in Pypy - I have not tried it.)
+
+You surely need to catch such errors, because it's not odd for such innocuous looking lines to get missed in a code review, especially in a big patch.
+
+Pylint - A detailed Look
+-------------------------
+
+1. Generating Pylint RC File and some recommendations
+2. Enabling or Disabling certain types of messages
+3. A look at Pylint Score
+4. Integrating it with `git`
+5. Pylint plugins - A very high level overview
+
+
+Invocation of Pylint can be controlled using a configuration file, I think it's a good idea to have your own custom pylintrc file that's tracked in your VCS, So one of the first things one would get started with is -
+
+1. pylint --generate-rcfile
+
+We are not going to look at all the options that are available in the rcfile, that itself is another talk. One should refer the document and use what's suitable for her project.
+
+Important thing to keep in mind here is it's a good idea to track the `pylintrc` file in your VCS as well.
+
+2. Enabling and Disabling certain types of messages
+
+   For types of messages -
+   1. Conventions (mostly about things like pep8, class/function/module level dockstrings)
+   2. Refactoring (mostly things that can be better written)
+   3. Warnings (unused import)
+   4. Errors (undefined variable etc.)
+
+If there are FIXMEs in your code, `pylint` will identify it's as a warning, I typically disable it at the rcfile level itself.
+Then if you use `global` keyword and access global variables in a function, that's a warning too. It's often annoying, sometimes you genuinely need it, but there are times it can be avoided, so typically that is enabled/disabled using editor directives (inside the file itself). You can also specify enabling/disabling a message on a command line - but DON'T do it in your dev workflow, use that only to figure out which one you want to enable / disable and in respective files - to ensure tracability.
+
+Pylint Score
+------------
+It's also possible to 'customize' how the score is calculated, So I will discuss the customization I typically use -
+
+Score calculation from my typical pylintrc file -
+
+```
+evaluation=10.0 - ((float(5 * error + 5 * warning + refactor + convention) / statement) * 10)
+```
+
+Couple of points to note here, Warnings are often as dangerous as Errors (if not more), so I treat every warning as equivalent of an error, this formula can be customized `ad infinitum` but something like above should be good enough. (Equivalent in gcc world is -Werr)
+
+Note: Don't take numerical value of code too serously - as in a small file with many functions without docstring can lower the score, but it's not a huge problem (well usually~). Similarly in a pretty big file, an Error or a Warning may not so severly affect the score, but it's actually a problem. Thing to remember -
+
+A good score may not be an indicator of a very good code quality, but a poor score almost always is an indicator of Poor code quality!
+
+Generally, a score above 8 should be an acceptable one and something below 6 without any Error or Warning might be worth taking another look at.
+
+This is somewhat similar to our engineering scores - :-)
+
+Pylint with `git`
+-----------------
+
+Note: This will work on Linux. To use this on Windows you've to use git-bash or something (which I have not tried this on, but may perhaps work.)
+
+Typically, if you only 'recommend' people to use it, chances are, people are not going to use it. Often one may forget too, so best idea is to actually enforce use of `pylint` upon every commit -
+So we'd use the mechanism that `git` provides to ensure this.
+
+Typically you can run a shell-script that can return a success/failure to allow a commit to happen or not -
+
+The way this works is - there are shell scripts inside -
+.git/hooks/ - one should take a look at those available in your repository. We'd make use of that.
+
+In the interest of time - let's just look at our `pre-commit git-hook`.
+
+```
+#!/bin/bash
+
+PYLINT=venv/bin/pylint
+
+TOPLEVEL=`git rev-parse --show-toplevel`
+
+PYLINTRC=${TOPLEVEL}/.pylintrc
+
+PYLINT_OPTS="--rcfile=${PYLINTRC}"
+
+PYTHON_FILES=$(git diff --name-only --cached --diff-filter=ACM | grep '\.py$')
+echo "Running Pylint ...."
+echo "${PYLINT} ${PYLINT_OPTS} ${PYTHON_FILES}"
+${PYLINT} ${PYLINT_OPTS} ${PYTHON_FILES}
+RESULT=$?
+
+ALL_RESULT=$(( $((${RESULT}&4)) || $((${RESULT}&2)) || $((${RESULT}&1)) ))
+if [[ ${ALL_RESULT} -eq 0 ]]; then
+    echo "pylint: Looks Okay."
+    exit 0
+else
+    echo "pylint: Errors or Warning. Fix them first..."
+    exit -1
+fi
+```
+
+Also, it's a good idea to keep tracking this in `git` so people use same pre-commit hook
+
+
+Pylint Plugins
+--------------
+It's possible to extend the functionality provided by Pylint for Particular projects.
+
+One very good example of that is Django. There are attributes that are generated for models, views, normally pylint would throw warnings for those and it could be annoying (and sometimes incorrect) to disable those warnings. eg.
+
+https://blog.landscape.io/using-pylint-on-django-projects-with-pylint-django.html List's some very good examples.
+
+
+To summarize
+-------------
+1. Use Pylint to ensure some code quality of your Python code
+2. Start with a rcfile and customize it for a project and track it in VCS
+3. Customize the messages that you want to enable and disable as appropriate (rc file or in the code block)
+4. Use git hooks to ensure that these things are adhered to
+5. Check if plugins exist for a project that we want to use - especially projects like Django.
+
+
+
+Putting it All together
+------------------------
+1. virtualenv for self contained environment   (Don't track virtual env in VCS)
+2. Pipfile and Pipfile.lock to track dependencies  (Track in VCS)
+3. Generate dependencies for differennt environments (and track generated files in VCS)
+4. Pylint for code quality enforcement (track pylintrc in VCS)
+
+
+Questions
+---------
